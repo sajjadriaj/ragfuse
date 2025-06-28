@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Interface - Personal RAG</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/chat.css') }}">
+
+    <style>
+        [x-cloak] { display: none !important; }
+        
+        /* Auto-expanding textarea */
+        .chat-input {
+            resize: none;
+            min-height: 40px;
+            max-height: 120px;
+        }
+        
+        /* Typing animation */
+        @keyframes typing {
+            0%, 80%, 100% {
+                transform: scale(0.8);
+                opacity: 0.5;
+            }
+            40% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+        
+        .typing-dot {
+            animation: typing 1.4s infinite ease-in-out;
+        }
+        
+        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+        .typing-dot:nth-child(3) { animation-delay: 0s; }
+        
+        /* Message bubbles */
+        .message-user {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .message-bot {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+        }
+        
+        /* Scrollbar */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="font-sans bg-white text-gray-800 h-screen overflow-hidden" x-data="chatApp()" x-init="init()">
+    <div class="flex flex-col h-screen">
+        <!-- Header - Matching documents.html exactly -->
+        <header class="bg-gray-50 border-b border-gray-200 px-5 py-4 flex justify-between items-center flex-shrink-0">
+            <div class="flex items-center gap-5">
+                <div class="text-lg font-semibold text-gray-800">RAGFuse</div>
+                <nav class="hidden md:flex gap-4">
+                    <a href="/documents" class="text-gray-500 px-3 py-2 rounded text-sm transition-all duration-200 hover:text-gray-800 hover:bg-gray-200">
+                        <i class="fas fa-folder mr-1"></i> Documents
+                    </a>
+                    <a href="/chat" class="bg-gray-300 text-gray-800 px-3 py-2 rounded text-sm transition-all duration-200 hover:bg-gray-200">
+                        <i class="fas fa-comments mr-1"></i> Chat
+                    </a>
+                    <a href="/settings" class="text-gray-500 px-3 py-2 rounded text-sm transition-all duration-200 hover:text-gray-800 hover:bg-gray-200">
+                        <i class="fas fa-cog mr-1"></i> Settings
+                    </a>
+                </nav>
+            </div>
+            <div class="flex items-center gap-3">
+                <div class="text-xs text-gray-500">
+                    <span x-text="`${stats.files} files`"></span> • 
+                    <span x-text="`${stats.folders} folders`"></span> • 
+                    <span x-text="`${stats.chunks} chunks`"></span>
+                </div>
+                <a href="/documents" class="px-3 py-2 border border-gray-300 bg-white text-gray-800 rounded text-xs transition-all duration-200 flex items-center gap-1 hover:bg-gray-50">
+                    <i class="fas fa-folder mr-1"></i> Manage Files
+                </a>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="flex flex-1 overflow-hidden">
+            <!-- Sidebar - Same width as documents.html -->
+            <aside class="w-80 bg-gray-50 border-r border-gray-200 flex flex-col flex-shrink-0">
+                <!-- Sidebar Header - Matching documents.html style -->
+                <div class="p-5 border-b border-gray-200 bg-white">
+                    <h2 class="text-base font-semibold mb-2 text-gray-800">Chat Settings</h2>
+                    <p class="text-xs text-gray-500">Configure your conversation context</p>
+                </div>
+                
+                <!-- Context Controls -->
+                <div class="p-4 border-b border-gray-200">
+                    <div class="space-y-4">
+                        <!-- Folder Selection -->
+                        <div>
+                            <label class="block text-xs text-gray-600 mb-1">Search Context</label>
+                            <select x-model="selectedFolderId" 
+                                    @change="updateContext()"
+                                    class="w-full px-3 py-2 bg-white border border-gray-300 rounded text-gray-800 text-xs focus:outline-none focus:border-gray-400">
+                                <option value="">All Documents</option>
+                                <template x-for="folder in availableFolders" :key="folder.id">
+                                    <option :value="folder.id" x-text="folder.name"></option>
+                                </template>
+                            </select>
+                        </div>
+
+                        <!-- LLM Selection -->
+                        <div>
+                            <label class="block text-xs text-gray-600 mb-1">LLM Provider</label>
+                            <select x-model="selectedLlmProvider"
+                                    class="w-full px-3 py-2 bg-white border border-gray-300 rounded text-gray-800 text-xs focus:outline-none focus:border-gray-400">
+                                <template x-for="provider in availableLlmProviders" :key="provider.id">
+                                    <option :value="provider.id" x-text="provider.name"></option>
+                                </template>
+                            </select>
+                        </div>
+
+                        <!-- Document Selection -->
+                        <div>
+                            <label class="block text-xs text-gray-600 mb-1">Selected Documents</label>
+                            <button @click="showDocumentSelector = true"
+                                    class="w-full px-3 py-2 bg-gray-800 text-white border border-gray-800 rounded text-xs transition-all duration-200 flex items-center gap-1 cursor-pointer hover:bg-gray-600 mb-2">
+                                <i class="fas fa-file-plus"></i> Select Documents
+                            </button>
+                            <div class="max-h-32 overflow-y-auto border border-gray-300 rounded bg-white custom-scrollbar">
+                                <div x-show="selectedDocuments.length === 0" class="p-3 text-center text-gray-500 text-xs italic">
+                                    No documents selected
+                                </div>
+                                <template x-for="doc in selectedDocuments" :key="doc.id">
+                                    <div class="flex items-center justify-between p-2 border-b border-gray-100 last:border-b-0">
+                                        <div class="flex items-center gap-2 flex-1 min-w-0">
+                                            <i :class="getFileIcon(doc)" class="text-xs text-gray-500"></i>
+                                            <span class="text-xs text-gray-700 truncate" x-text="doc.name"></span>
+                                        </div>
+                                        <button @click="removeDocument(doc)" 
+                                                class="text-gray-400 hover:text-red-500 text-xs">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Quick Actions -->
+                        <div class="space-y-2">
+                            <button @click="newConversation()"
+                                    class="w-full px-3 py-2 border border-gray-300 bg-white text-gray-800 rounded text-xs transition-all duration-200 flex items-center gap-1 cursor-pointer hover:bg-gray-50">
+                                <i class="fas fa-plus"></i> New Conversation
+                            </button>
+                            <button @click="clearCurrentChat()" 
+                                    :disabled="messages.length === 0"
+                                    class="w-full px-3 py-2 border border-gray-300 bg-white text-gray-800 rounded text-xs transition-all duration-200 flex items-center gap-1 cursor-pointer hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+                                <i class="fas fa-trash"></i> Clear Chat
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Conversation History -->
+                <div class="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                    <div class="text-xs text-gray-500 uppercase tracking-wide pb-2 mb-2 border-b border-gray-200">
+                        Recent Conversations
+                    </div>
+                    
+                    <!-- Loading state -->
+                    <div x-show="loadingConversations" class="flex justify-center items-center p-4">
+                        <i class="fas fa-spinner fa-spin text-gray-400"></i>
+                    </div>
+                    
+                    <!-- Empty state -->
+                    <div x-show="!loadingConversations && conversations.length === 0" class="text-center py-8">
+                        <i class="fas fa-comments text-3xl text-gray-300 mb-3"></i>
+                        <p class="text-xs text-gray-500">No conversations yet</p>
+                    </div>
+                    
+                    <!-- Conversation list -->
+                    <template x-for="conv in conversations" :key="conv.conversation_id">
+                        <div @click="loadConversation(conv.conversation_id)"
+                             class="relative p-3 mb-2 bg-white rounded cursor-pointer transition-all duration-200 border border-gray-200 hover:bg-gray-100 hover:border-gray-400 group"
+                             :class="{ 'bg-gray-100 border-gray-400': currentConversationId === conv.conversation_id }">
+                            <div class="text-xs font-medium text-gray-800 truncate mb-1" x-text="conv.title"></div>
+                            <div class="text-xs text-gray-400 truncate mb-1" x-text="conv.preview"></div>
+                            
+                            <!-- Selected Documents for Conversation -->
+                            <div x-show="conv.selected_documents_details && conv.selected_documents_details.length > 0" class="flex flex-wrap gap-1 mt-1">
+                                <template x-for="doc in conv.selected_documents_details" :key="doc.id">
+                                    <span class="flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">
+                                        <i :class="getFileIcon(doc)"></i>
+                                        <span x-text="doc.name.split('.')[0]"></span>
+                                    </span>
+                                </template>
+                            </div>
+
+                            <div class="text-xs text-gray-500" x-text="formatDate(conv.updated_at)"></div>
+                            <button @click.stop="deleteConversation(conv.conversation_id)" 
+                                    class="absolute top-2 right-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </div>
+                    </template>
+                </div>
+            </aside>
+
+            <!-- Chat Area -->
+            <main class="flex-1 flex flex-col bg-white">
+                <!-- Chat Header -->
+                <div class="px-5 py-4 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
+                    <div class="flex items-center gap-3">
+                        <h1 class="text-base font-semibold text-gray-800">Chat with your RAGFuse</h1>
+                        <span class="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full" 
+                              x-text="currentConversationId ? 'Active Chat' : 'New Conversation'"></span>
+                    </div>
+                    <div class="flex gap-2">
+                        <button @click="exportConversation()" 
+                                :disabled="messages.length === 0"
+                                class="px-3 py-2 border border-gray-300 bg-white text-gray-800 rounded text-xs transition-all duration-200 flex items-center gap-1 cursor-pointer hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+                            <i class="fas fa-download"></i> Export
+                        </button>
+                        <button @click="shareConversation()" 
+                                :disabled="messages.length === 0"
+                                class="px-3 py-2 border border-gray-300 bg-white text-gray-800 rounded text-xs transition-all duration-200 flex items-center gap-1 cursor-pointer hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+                            <i class="fas fa-share"></i> Share
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Messages Area -->
+                <div class="flex-1 overflow-y-auto p-5 custom-scrollbar" id="messages-container">
+                    <!-- Empty state -->
+                    <div x-show="messages.length === 0" class="flex flex-col items-center justify-center h-full text-gray-400 text-center">
+                        <i class="fas fa-comments text-6xl text-gray-300 mb-5"></i>
+                        <h3 class="text-lg text-gray-500 mb-4">Start a conversation</h3>
+                        <p class="text-sm text-gray-400 max-w-md leading-relaxed mb-5">
+                            Ask questions about your uploaded documents. I'll search through your RAGFuse to provide relevant answers with source citations.
+                        </p>
+                        
+                        <!-- Example questions -->
+                        <div class="space-y-2 w-full max-w-md">
+                            <button @click="askExample('What are the main topics in my documents?')"
+                                    class="w-full p-3 text-left bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors text-sm">
+                                What are the main topics in my documents?
+                            </button>
+                            <button @click="askExample('Summarize the key findings from my research papers')"
+                                    class="w-full p-3 text-left bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors text-sm">
+                                Summarize the key findings from my research papers
+                            </button>
+                            <button @click="askExample('Find information about a specific topic')"
+                                    class="w-full p-3 text-left bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors text-sm">
+                                Find information about a specific topic
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Messages -->
+                    <div x-show="messages.length > 0" class="space-y-4">
+                        <template x-for="(message, index) in messages" :key="index">
+                            <div class="flex" :class="message.role === 'user' ? 'justify-end' : 'justify-start'">
+                                <div class="max-w-3xl">
+                                    <!-- User message -->
+                                    <div x-show="message.role === 'user'" 
+                                         class="message-user text-white px-4 py-3 rounded-lg">
+                                        <div class="text-sm" x-text="message.content"></div>
+                                        <div class="text-xs opacity-75 mt-1" x-text="formatTime(message.timestamp)"></div>
+                                    </div>
+                                    
+                                    <!-- Bot message -->
+                                    <div x-show="message.role === 'bot'" 
+                                         class="message-bot px-4 py-3 rounded-lg">
+                                        <div class="text-sm text-gray-800 leading-relaxed" x-html="formatMessage(message.content)"></div>
+                                        
+                                        <!-- RAG Chunks (Expander) -->
+                                        <div x-show="message.context_parts && message.context_parts.length > 0" class="mt-3 pt-3 border-t border-gray-200">
+                                            <details class="text-xs text-gray-600">
+                                                <summary class="cursor-pointer font-medium">Context Chunks Used</summary>
+                                                <div class="mt-2 space-y-1">
+                                                    <template x-for="(chunk, idx) in message.context_parts" :key="idx">
+                                                        <div class="bg-gray-100 p-2 rounded-md border border-gray-200">
+                                                            <p class="text-gray-700 text-xs leading-snug" x-text="chunk"></p>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </details>
+                                        </div>
+
+                                        <!-- Sources -->
+                                        <div x-show="message.sources && message.sources.length > 0" class="mt-3 pt-3 border-t border-gray-200">
+                                            <div class="text-xs text-gray-500 mb-2">Sources:</div>
+                                            <div class="space-y-1">
+                                                <template x-for="source in message.sources" :key="source.filename + '_' + (source.chunk_index || source.url)">
+                                                    <div class="flex items-center gap-2 text-xs">
+                                                        <i :class="getFileIcon(source)" class="text-gray-400"></i>
+                                                        <span class="text-gray-600" x-text="source.filename"></span>
+                                                        <span x-show="source.type === 'document'" class="px-1 py-0.5 bg-gray-200 text-gray-600 rounded text-xs" 
+                                                              x-text="`${Math.round(source.similarity * 100)}%`"></span>
+                                                        <a x-show="source.type === 'web'" :href="source.url" target="_blank" class="text-blue-500 hover:underline">
+                                                            <i class="fas fa-external-link-alt"></i> Link
+                                                        </a>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="text-xs text-gray-400 mt-2" x-text="formatTime(message.timestamp)"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                        
+                        <!-- Typing indicator -->
+                        <div x-show="isTyping" class="flex justify-start">
+                            <div class="message-bot px-4 py-3 rounded-lg max-w-xs">
+                                <div class="flex items-center gap-1">
+                                    <div class="w-2 h-2 bg-gray-400 rounded-full typing-dot"></div>
+                                    <div class="w-2 h-2 bg-gray-400 rounded-full typing-dot"></div>
+                                    <div class="w-2 h-2 bg-gray-400 rounded-full typing-dot"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Chat Input -->
+                <div class="p-5 border-t border-gray-200 bg-gray-50">
+                    <div class="flex flex-col gap-3 bg-white border border-gray-300 rounded-lg p-3 focus-within:border-gray-400">
+                        <!-- Web Search Toggle -->
+                        <div class="flex items-center justify-start">
+                            <label for="webSearchToggle" class="flex items-center cursor-pointer">
+                                <div class="relative">
+                                    <input type="checkbox" id="webSearchToggle" class="sr-only peer" x-model="webSearchEnabled">
+                                    <div class="relative block bg-white border border-gray-300 w-10 h-6 rounded-full p-0.5 peer-checked:bg-black">
+                                        <div class="absolute top-1/2 -translate-y-1/2 left-0.5 w-4 h-4 rounded-full transition border border-red-500"
+                                         x-bind:class="webSearchEnabled ? 'bg-white translate-x-[20px]' : 'bg-black'">
+                                    </div>
+                                    </div>
+                                </div>
+                                <div class="ml-3 text-gray-700 font-medium text-sm">
+                                    Web Search
+                                </div>
+                            </label>
+                        </div>
+                        <div class="flex gap-3 items-end">
+                            <textarea x-model="messageInput"
+                                  @keydown.enter.prevent="handleKeyDown($event)"
+                                  @input="autoResize($event)"
+                                  :disabled="isTyping"
+                                  class="chat-input flex-1 bg-transparent border-none text-gray-800 text-sm resize-none focus:outline-none placeholder-gray-400"
+                                  placeholder="Ask a question about your documents..."
+                                  rows="1"></textarea>
+                        <button @click="sendMessage()" 
+                                :disabled="!messageInput.trim() || isTyping"
+                                class="px-4 py-2 bg-gray-800 text-white text-sm rounded cursor-pointer transition-all duration-200 flex items-center gap-1 hover:bg-gray-600 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                            <i class="fas fa-paper-plane"></i>
+                            <span x-show="!isTyping">Send</span>
+                            <span x-show="isTyping">Sending...</span>
+                        </button>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Document Selector Modal -->
+    <div x-show="showDocumentSelector" 
+         x-cloak
+         class="fixed inset-0 bg-black bg-opacity-50 z-50" 
+         @click.self="showDocumentSelector = false">
+        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white border border-gray-200 rounded-md p-5 min-w-96 max-w-3xl w-full max-h-[90vh] overflow-hidden shadow-lg">
+            <div class="mb-4 pb-2 border-b border-gray-200 flex justify-between items-center">
+                <h3 class="text-base font-semibold text-gray-800">Select Documents for Chat</h3>
+                <button class="bg-transparent border-none text-gray-500 text-xl cursor-pointer hover:text-gray-800" 
+                        @click="showDocumentSelector = false">&times;</button>
+            </div>
+            
+            <div class="mb-4">
+                <input type="text" 
+                       x-model="documentSearchQuery"
+                       @input="searchDocuments()"
+                       class="w-full px-3 py-2 bg-white border border-gray-300 rounded text-gray-800 text-sm focus:outline-none focus:border-gray-400"
+                       placeholder="Search documents...">
+            </div>
+            
+            <div class="max-h-96 overflow-y-auto border border-gray-200 rounded custom-scrollbar">
+                <template x-for="doc in filteredDocuments" :key="doc.id">
+                    <label class="flex items-center p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0">
+                        <input type="checkbox" 
+                               :checked="isDocumentSelected(doc)"
+                               @change="toggleDocument(doc)"
+                               class="mr-3">
+                        <div class="flex items-center gap-2 flex-1">
+                            <i :class="getFileIcon(doc)" class="text-sm text-gray-500"></i>
+                            <div class="flex-1 min-w-0">
+                                <div class="text-sm font-medium text-gray-800 truncate" x-text="doc.name"></div>
+                                <div class="text-xs text-gray-400" x-text="`${doc.extension.toUpperCase()} • ${formatFileSize(doc.size)}`"></div>
+                            </div>
+                        </div>
+                    </label>
+                </template>
+            </div>
+            
+            <div class="flex justify-between items-center mt-4">
+                <div class="text-xs text-gray-500">
+                    <span x-text="selectedDocuments.length"></span> documents selected
+                </div>
+                <div class="flex gap-2">
+                    <button @click="showDocumentSelector = false"
+                            class="px-3 py-2 border border-gray-300 bg-white text-gray-800 rounded text-xs transition-all duration-200 flex items-center gap-1 cursor-pointer hover:bg-gray-50">
+                        Cancel
+                    </button>
+                    <button @click="applyDocumentSelection()"
+                            class="px-3 py-2 bg-gray-800 text-white border border-gray-800 rounded text-xs transition-all duration-200 flex items-center gap-1 cursor-pointer hover:bg-gray-600">
+                        Apply Selection
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Modal Component -->
+    <div x-show="showModal" x-cloak
+         class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center"
+         @click.self="hideModal()">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md mx-auto transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center">
+                    <template x-if="modalType === 'success'">
+                        <i class="fas fa-check-circle text-green-500 text-2xl mr-3"></i>
+                    </template>
+                    <template x-if="modalType === 'info'">
+                        <i class="fas fa-info-circle text-blue-500 text-2xl mr-3"></i>
+                    </template>
+                    <template x-if="modalType === 'warning' || modalType === 'confirm'">
+                        <i class="fas fa-exclamation-triangle text-yellow-500 text-2xl mr-3"></i>
+                    </template>
+                    <template x-if="modalType === 'error'">
+                        <i class="fas fa-times-circle text-red-500 text-2xl mr-3"></i>
+                    </template>
+                    <h3 class="text-lg font-semibold text-gray-900" x-text="modalTitle"></h3>
+                </div>
+                <button @click="hideModal()" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+            </div>
+            <div class="text-sm text-gray-700 mb-6" x-html="modalMessage"></div>
+            <div class="flex justify-end space-x-3">
+                <div x-show="modalType === 'confirm'" class="flex space-x-3">
+                    <button @click="hideModal()"
+                            class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        Cancel
+                    </button>
+                    <button @click="modalConfirmAction().then(() => hideModal())"
+                            class="px-4 py-2 rounded-md text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                        Confirm
+                    </button>
+                </div>
+                <div x-show="modalType !== 'confirm'" class="flex space-x-3">
+                    <button @click="hideModal()"
+                            class="px-4 py-2 rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                        OK
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div x-show="toast.show" 
+         x-cloak
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="transform translate-x-full"
+         x-transition:enter-end="transform translate-x-0"
+         x-transition:leave="transition ease-in duration-300"
+         x-transition:leave-start="transform translate-x-0"
+         x-transition:leave-end="transform translate-x-full"
+         class="fixed top-5 right-5 bg-white text-gray-800 px-5 py-3 rounded border border-gray-200 shadow-lg z-50"
+         :class="{ 'border-l-4 border-red-600': toast.type === 'error', 'border-l-4 border-green-600': toast.type === 'success' }">
+        <span x-text="toast.message"></span>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/showdown/dist/showdown.min.js"></script>
+    <script src="https://unpkg.com/fuse.js@6.6.2/dist/fuse.min.js"></script>
+    <script src="{{ url_for('static', filename='js/chat-alpine.js') }}"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+Flask
+chromadb
+PyPDF2
+python-docx
+python-pptx
+chonkie[neural]
+requests
+duckduckgo_search
+openai
+anthropic
+ollama
+accelerate
+google-generativeai

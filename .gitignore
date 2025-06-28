@@ -1,0 +1,40 @@
+# Python
+*.pyc
+__pycache__/
+venv/
+.venv/
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Editor/IDE
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+
+# Docker
+# Exclude build context directories that are mounted as volumes
+# These are typically managed by Docker and shouldn't be in Git
+chroma_data/
+sqlite_dbs/
+uploads/
+
+# Logs
+*.log
+*.log.*
+
+# Environment variables
+.env
+.flaskenv
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Specific to this project's data
+chroma_data/
+sqlite_dbs/
+uploads/
