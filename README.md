@@ -11,6 +11,11 @@ This is a Flask-based RAG (Retrieval-Augmented Generation) application that allo
 - **Document Viewer:** View uploaded PDF documents directly within the browser.
 - **Web Search Integration:** Toggle web search on/off for chat queries.
 - **Improved UI:** Custom styled modals for alerts and confirmations, and meaningful conversation naming.
+- **Advanced Chunking:** Utilizes `chonkie` with a `NeuralChunker` for intelligent document splitting.
+
+## Chunking
+
+This application uses `chonkie` with its `NeuralChunker` for advanced document chunking. This method intelligently splits documents into meaningful pieces, which can improve the quality of the retrieval and generation process in the RAG pipeline.
 
 ## Setup and Running
 
