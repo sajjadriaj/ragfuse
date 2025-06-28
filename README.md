@@ -71,6 +71,17 @@ To configure your LLM API keys and endpoints:
 
 These settings will be persisted in the `sqlite_dbs` directory on your host machine.
 
+## Screenshots
+
+**Chat Interface**
+![Chat Interface](chat.png)
+
+**Document Management**
+![Document Management](documents.png)
+
+**Settings Page**
+![Settings Page](settings.png)
+
 ## Development
 
 After running the Docker container in development mode, any changes you make to the source code on your host machine will be automatically reflected in the running container (Flask will typically auto-reload for Python changes, and static files will be served directly).
