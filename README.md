@@ -27,7 +27,7 @@ This application uses `chonkie` with its `NeuralChunker` for advanced document c
 ### 1. Clone the Repository
 
 ```bash
-git clone <repository_url>
+git clone https://github.com/sajjadriaj/ragfuse
 cd RAG
 ```
 
@@ -85,5 +85,3 @@ These settings will be persisted in the `sqlite_dbs` directory on your host mach
 ## Development
 
 After running the Docker container in development mode, any changes you make to the source code on your host machine will be automatically reflected in the running container (Flask will typically auto-reload for Python changes, and static files will be served directly).
-
-```
