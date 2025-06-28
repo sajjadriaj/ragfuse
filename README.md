@@ -4,13 +4,12 @@ This is a Flask-based RAG (Retrieval-Augmented Generation) application that allo
 
 ## Features
 
-- **Document Management:** Upload, organize, and delete documents (PDF, DOCX, PPTX, TXT, MD, CSV, JSON).
+- **Document Management:** Upload, organize, and delete documents (PDF, DOCX, PPTX, TXT, MD, CSV, JSON). You can create folders and organize your files under different folders.
 - **RAG Chat:** Ask questions about your documents, with context retrieved from your RAGFuse.
 - **Configurable LLMs:** Support for OpenAI, Claude, Gemini, and Ollama models.
 - **Persistent Settings:** LLM API keys and endpoints are saved across application restarts.
 - **Document Viewer:** View uploaded PDF documents directly within the browser.
 - **Web Search Integration:** Toggle web search on/off for chat queries.
-- **Improved UI:** Custom styled modals for alerts and confirmations, and meaningful conversation naming.
 - **Advanced Chunking:** Utilizes `chonkie` with a `NeuralChunker` for intelligent document splitting.
 
 ## Chunking
@@ -28,7 +27,6 @@ This application uses `chonkie` with its `NeuralChunker` for advanced document c
 
 ```bash
 git clone https://github.com/sajjadriaj/ragfuse
-cd RAG
 ```
 
 ### 2. Build the Docker Image (Development)
